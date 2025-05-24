@@ -1,54 +1,68 @@
 
 const express = require('express');
 const bodyParser = require('body-parser');
-const fs = require('fs');
 const nodemailer = require('nodemailer');
+const fs = require('fs');
 const cors = require('cors');
-const path = require('path');
 require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Middleware
 app.use(cors());
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(bodyParser.json());
 app.use(express.static('public'));
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
+// Configuration Nodemailer
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
+
+// Route POST pour contact
 app.post('/contact', (req, res) => {
-  const { name, email, message } = req.body;
-  const newMessage = { name, email, message, date: new Date().toISOString() };
-  const messagesFile = path.join(__dirname, 'messages.json');
-  const messages = JSON.parse(fs.readFileSync(messagesFile, 'utf8'));
-  messages.push(newMessage);
-  fs.writeFileSync(messagesFile, JSON.stringify(messages, null, 2));
-
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    }
-  });
+  const { nom, email, message } = req.body;
 
   const mailOptions = {
     from: process.env.EMAIL_USER,
-    to: 'service.malitechglobal@gmail.com',
-    subject: 'Nouveau message depuis le site Malitec Global',
-    text: `Nom: ${name}\nEmail: ${email}\nMessage:\n${message}`
+    to: process.env.EMAIL_USER,
+    subject: `Nouveau message de ${nom}`,
+    text: `Nom: ${nom}\nEmail: ${email}\nMessage:\n${message}`
   };
 
   transporter.sendMail(mailOptions, (error, info) => {
     if (error) {
-      console.error('Erreur d'envoi de mail:', error);
-      res.status(500).send('Erreur lors de l'envoi du message.');
+      console.error('Erreur d\'envoi de mail:', error);
+      res.status(500).send({ message: 'Erreur lors de l\'envoi de l\'email.' });
     } else {
-      console.log('Message envoyé :', info.response);
-      res.status(200).send('Message reçu avec succès.');
+      console.log('Email envoyé :', info.response);
+
+      const nouveauMessage = { nom, email, message, date: new Date().toISOString() };
+      const messagesPath = './messages.json';
+
+      fs.readFile(messagesPath, 'utf8', (err, data) => {
+        let messages = [];
+        if (!err && data) {
+          try {
+            messages = JSON.parse(data);
+          } catch (e) {
+            console.error('Erreur de lecture JSON:', e);
+          }
+        }
+        messages.push(nouveauMessage);
+        fs.writeFile(messagesPath, JSON.stringify(messages, null, 2), () => {});
+      });
+
+      res.status(200).send({ message: 'Message envoyé avec succès !' });
     }
   });
 });
 
 app.listen(port, () => {
-  console.log(`Serveur lancé sur http://localhost:${port}`);
+  console.log(`Serveur en ligne sur http://localhost:${port}`);
 });
